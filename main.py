@@ -9,35 +9,33 @@ import time
 from data_importing import data_importing
 from data_loading import data_loading
 from PCA import PCA
+import numpy as np
 from model import model
-from run_princeton import run_princeton
-import PIL
-import os
-
 
 """Edit these paths per user requirements"""
-directory = '/Users/liamparker/Desktop/MLAlgo/Images/'
-attributes = '/Users/liamparker/Desktop/MLAlgo/attributes.txt'
-test_img = '/Users/liamparker/Desktop/MLAlgo/liamtest.jpg'
-princeton = '/Users/liamparker/Desktop/MLAlgo/princeton/'
+directory = 'C:/Users/onale/Desktop/Project/faces2/'
+attributes = 'C:/Users/onale/Desktop/Project/attributes2.txt'
+test_img = 'C:/Users/onale/Desktop/Project/Emre.jpeg'
 
 """Edit these variables to adjust model specifications"""
-N                 = 100     #Number of images in training + validation
+N                 = 2000     #Number of images in training + validation
 split             = 0.8     #Split between training + validation
 variance_retained = 0.9     #Variance retention for principal component analysis
 
-load              = True    #Load data from prebuilt file
-load_PCA          = True    #Load PCA data from prebuilt file
+load              = True   #Load data from prebuilt file
+load_PCA          = True   #Load PCA data from prebuilt file
+load_cnn          = True   #Load a previously trained CNN
 recognize         = True    #Recognize faces
-grayscale         = True    #Grayscale images
-create_load       = True    #Create load file
-create_load_PCA   = True    #Create PCA load file
+grayscale         = False    #Grayscale images
+create_load       = False    #Create load file
+create_load_PCA   = False    #Create PCA load file
+epochs            = 3        #Number of epochs to train CNN
 
-features          = ['Male', 'Pale']
-model_type        = 'Logistic Regression'
+features          = ['Male']
+model_type        = 'CNN'
 
-#Features:        'Male', 'Attractive', 'Black Hair', 'Blonde Hair', 'Brown Hair', 'Chubby', 
-#                 'Pale', 'Straight Hair', 'Wavy Hair'
+#Features:     'Male', 'Attractive', 'Black Hair', 'Blonde Hair', 'Brown Hair', 'Chubby', 
+#              'Pale', 'Straight Hair', 'Wavy Hair'
 
 
 def print_settings():
@@ -52,6 +50,7 @@ def print_settings():
     print('features: ' + string)
     print('samples: '+str(N))
     print('load_data: '+str(load))
+    print('load_cnn: '+str(load_cnn))
     print('train-split: '+str(split))
     print('grayscale: '+str(grayscale))
     print('recognize-face: '+str(recognize)) 
@@ -87,22 +86,49 @@ def print_time(string, tlast):
     tlast = tnow
     return tlast
 
-def run_models(train, test, nfa):
+def convert_labels(train_label, test_label):
+    train_y = np.zeros(len(train_label))
+    i = 0
+    for label in train_label:
+        if label == '-1':
+            train_y[i] = 0
+        else:
+            train_y[i] = 1
+        i += 1
+
+    test_y = np.zeros(len(test_label))
+    i = 0
+    for label in test_label:
+        if label == '-1':
+            test_y[i] = 0
+        else:
+            test_y[i] = 1
+        i += 1
+    
+    return train_y, test_y
+
+def generate_scores(train, test, nfa, loadModel, feature):
     """Generate scores for each model of each feature"""
     all_scores = []
-    all_models = []
     
     for feature in features:
         data_object = data_importing(directory, N, split, grayscale, recognize, feature, attributes, create_load)
         train_label, test_label = data_object.process_labels(nfa)
+
+        
+        if model_type == 'CNN':
+            train_label, test_label = convert_labels(train_label, test_label)
+            
         model_object = model(train, test, train_label, test_label)
         
-        model1, score = model_object.logistic_regression()
+        if model_type == "Logistic Regression":
+            _, score = model_object.logistic_regression()
+        if model_type == "CNN":
+            _, score = model_object.CNN(loadModel, feature)
         all_scores.append(score)
-        all_models.append(model1)
     
-    return all_models, all_scores    
-        
+    return all_scores
+
 if __name__ == '__main__':
     #Initialize time and print current settings
     print_settings()
@@ -121,20 +147,22 @@ if __name__ == '__main__':
     #Print time after data processing has been completed
     tlast = print_time('Data Importing', tlast)
     
-    #Load or import PCA per specifications
-    if load_PCA==True:
-        data_object = data_loading(N, split, grayscale)
-        train, test = data_object.load_PCA()
-        
-    if load_PCA==False:
-        data_object = PCA(variance_retained, train, test, grayscale, create_load_PCA, N)
-        train, test = data_object.analysis()
     
-    #Print time after PCA has been completed
-    tlast = print_time('Principal Component Analysis', tlast)
+    if model_type == 'Logistic Regression':
+        #Load or import PCA per specifications
+        if load_PCA==True:
+            data_object = data_loading(N, split, grayscale)
+            train, test = data_object.load_PCA()
+        
+        if load_PCA==False:
+            data_object = PCA(variance_retained, train, test, grayscale, create_load_PCA)
+            train, test = data_object.analysis()
+    
+        #Print time after PCA has been completed
+        tlast = print_time('Principal Component Analysis', tlast)
     
     #Generate scores of ML models on features
-    models, scores = run_models(train, test, nfa)
+    scores = generate_scores(train, test, nfa, load_cnn, features[0])
     
     #Print time after model generation and scoring
     tlast = print_time('Model generation on all features', tlast)
@@ -147,11 +175,5 @@ if __name__ == '__main__':
         print(feature + ': ' + str(scores[i]))
         i += 1
     
-    #Run on princeton data set:
-    princeton_object = run_princeton(models, features, princeton, grayscale)
-    princeton_object.run_models()
-    
     #Print out the total time elapsed
     print_time('Total Time Elapsed', tlast)
-
-

@@ -94,6 +94,6 @@ class model:
         #train model
         model.fit(train, y_train,validation_data=(test, y_test), epochs=3)
         model.save('C:/Users/onale/Desktop/Project/'+feature)
-        model.
+        return model, score
 
 
